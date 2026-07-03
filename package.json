@@ -9,6 +9,7 @@
   "files": [
     "bin",
     "lib",
+    "APPLICATION_AGENT.md",
     "README.md"
   ],
   "engines": {

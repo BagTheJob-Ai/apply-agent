@@ -1,93 +1,63 @@
 import { test, expect } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
-  DEFAULT_BASE_URL,
-  SkillFetchError,
-  resolveBaseUrl,
-  fetchSkill,
+  parseSkillVersion,
+  loadBundledSkill,
   clipboardCommandFor,
   instructionsFor,
   parseArgs,
   run,
 } from "./lib/cli.js";
 
-// The CLI is a fetch-and-paste helper (issue #217). These tests exercise it
-// without any network or clipboard by injecting a fake fetch and forcing
-// --stdout, matching the "testable without network" requirement.
+// The CLI bundles the skill (issue #217) and copies it to the clipboard. These
+// tests inject a fake skill loader and force --stdout, so they never touch the
+// real clipboard.
 
-const SKILL_BODY = "**Template version:** `v1.23.0`\n\nSkill body here.";
+const SKILL_BODY = "**Template version:** `v1.23.0` — the skill.\n\nBody here.";
+const fakeLoader =
+  (content = SKILL_BODY) =>
+  () => ({ version: parseSkillVersion(content), content });
 
-// A fetch stub that returns a JSON {version, content} response.
-const okFetch =
-  (version = "v1.23.0", content = SKILL_BODY) =>
-  async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ version, content }),
-  });
+// ── the actual bundled skill ─────────────────────────────────────────────────
 
-// ── resolveBaseUrl ───────────────────────────────────────────────────────────
-
-test("resolveBaseUrl precedence: flag > env > default", () => {
-  expect(resolveBaseUrl({ flag: "http://flag", env: "http://env" })).toBe("http://flag");
-  expect(resolveBaseUrl({ env: "http://env" })).toBe("http://env");
-  expect(resolveBaseUrl({})).toBe(DEFAULT_BASE_URL);
+test("the packaged APPLICATION_AGENT.md is present and parses a Template version", () => {
+  const real = loadBundledSkill();
+  expect(real.version).toMatch(/^v[0-9]+\.[0-9]+\.[0-9]+$/);
+  expect(real.content).toContain("Template version");
 });
 
-test("resolveBaseUrl strips trailing slashes and treats empty as default", () => {
-  expect(resolveBaseUrl({ flag: "http://x/" })).toBe("http://x");
-  expect(resolveBaseUrl({ flag: "http://x///" })).toBe("http://x");
-  expect(resolveBaseUrl({ flag: "   " })).toBe(DEFAULT_BASE_URL);
-  expect(resolveBaseUrl({ env: "" })).toBe(DEFAULT_BASE_URL);
+test("bundled skill version matches package.json major.minor", () => {
+  const { version } = loadBundledSkill();
+  const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+  const mm = (v: string) => v.replace(/^v/, "").split(".").slice(0, 2).join(".");
+  expect(mm(version)).toBe(mm(pkg.version));
 });
 
-// ── fetchSkill ───────────────────────────────────────────────────────────────
+// ── parseSkillVersion ────────────────────────────────────────────────────────
 
-test("fetchSkill happy path parses {version, content}", async () => {
-  const skill = await fetchSkill("http://srv", okFetch());
-  expect(skill.version).toBe("v1.23.0");
-  expect(skill.content).toBe(SKILL_BODY);
+test("parseSkillVersion extracts the version, null when absent", () => {
+  expect(parseSkillVersion("**Template version:** `v2.5.1`\nrest")).toBe("v2.5.1");
+  expect(parseSkillVersion("no version line here")).toBeNull();
 });
 
-test("fetchSkill hits {base}/skill exactly", async () => {
-  let seen = "";
-  await fetchSkill("http://srv", async (url) => {
-    seen = url;
-    return { ok: true, status: 200, json: async () => ({ version: "v1", content: "x" }) };
-  });
-  expect(seen).toBe("http://srv/skill");
+// ── loadBundledSkill (injected read) ─────────────────────────────────────────
+
+test("loadBundledSkill returns version + content on a valid skill", () => {
+  const s = loadBundledSkill(() => SKILL_BODY);
+  expect(s.version).toBe("v1.23.0");
+  expect(s.content).toBe(SKILL_BODY);
 });
 
-test("fetchSkill rejects non-200 with the URL and status in the message", async () => {
-  const fetchImpl = async () => ({ ok: false, status: 503, json: async () => ({}) });
-  await expect(fetchSkill("http://srv", fetchImpl)).rejects.toBeInstanceOf(SkillFetchError);
-  await expect(fetchSkill("http://srv", fetchImpl)).rejects.toThrow(/http:\/\/srv\/skill/);
-  await expect(fetchSkill("http://srv", fetchImpl)).rejects.toThrow(/503/);
+test("loadBundledSkill throws on a read failure", () => {
+  expect(() =>
+    loadBundledSkill(() => {
+      throw new Error("ENOENT");
+    }),
+  ).toThrow(/Could not read the bundled skill/);
 });
 
-test("fetchSkill rejects a non-JSON (HTML proxy) body", async () => {
-  const fetchImpl = async () => ({
-    ok: true,
-    status: 200,
-    json: async () => {
-      throw new SyntaxError("Unexpected token <");
-    },
-  });
-  await expect(fetchSkill("http://srv", fetchImpl)).rejects.toThrow(/not valid JSON/);
-});
-
-test("fetchSkill rejects missing or empty version/content fields", async () => {
-  const missingVersion = async () => ({ ok: true, status: 200, json: async () => ({ content: "x" }) });
-  const emptyContent = async () => ({ ok: true, status: 200, json: async () => ({ version: "v1", content: "   " }) });
-  await expect(fetchSkill("http://srv", missingVersion)).rejects.toThrow(/'version' field/);
-  await expect(fetchSkill("http://srv", emptyContent)).rejects.toThrow(/'content' field/);
-});
-
-test("fetchSkill wraps a network error rather than leaking it", async () => {
-  const fetchImpl = async () => {
-    throw new TypeError("fetch failed");
-  };
-  await expect(fetchSkill("http://srv", fetchImpl)).rejects.toBeInstanceOf(SkillFetchError);
-  await expect(fetchSkill("http://srv", fetchImpl)).rejects.toThrow(/fetch failed/);
+test("loadBundledSkill throws when the Template version line is missing", () => {
+  expect(() => loadBundledSkill(() => "a skill with no version header")).toThrow(/malformed/);
 });
 
 // ── clipboardCommandFor ──────────────────────────────────────────────────────
@@ -104,7 +74,7 @@ test("clipboardCommandFor picks the right command per platform", () => {
 // ── instructionsFor ──────────────────────────────────────────────────────────
 
 test("setup instructions lead with review and include version + paste steps", () => {
-  const msg = instructionsFor("setup", { version: "v1.23.0", copied: true, baseUrl: "https://app.bagthejob.ai" });
+  const msg = instructionsFor("setup", { version: "v1.23.0", copied: true });
   expect(msg).toContain("v1.23.0");
   expect(msg).toContain("Review the skill");
   expect(msg).toContain("daily-job-application");
@@ -145,11 +115,9 @@ test("--stdout wording distinguishes a chosen stdout from a broken clipboard", (
 
 // ── parseArgs ────────────────────────────────────────────────────────────────
 
-test("parseArgs reads command, flags, and --base-url in both forms", () => {
+test("parseArgs reads command and flags (no --base-url anymore)", () => {
   expect(parseArgs(["setup"]).command).toBe("setup");
   expect(parseArgs(["update", "--stdout"]).stdout).toBe(true);
-  expect(parseArgs(["setup", "--base-url", "http://x"]).baseUrlFlag).toBe("http://x");
-  expect(parseArgs(["setup", "--base-url=http://y"]).baseUrlFlag).toBe("http://y");
   expect(parseArgs(["--help"]).help).toBe(true);
   expect(parseArgs(["-v"]).version).toBe(true);
 });
@@ -157,14 +125,14 @@ test("parseArgs reads command, flags, and --base-url in both forms", () => {
 // ── run ──────────────────────────────────────────────────────────────────────
 
 function capture() {
-  const lines = [];
-  return { sink: (s) => lines.push(s), lines };
+  const lines: string[] = [];
+  return { sink: (s: string) => lines.push(s), lines };
 }
 
-test("run setup with stubbed fetch and --stdout exits 0 and prints the skill", async () => {
+test("run setup with injected skill and --stdout exits 0 and prints the skill", async () => {
   const o = capture();
-  const code = await run(["setup", "--stdout", "--base-url", "http://srv"], {
-    fetchImpl: okFetch(),
+  const code = await run(["setup", "--stdout"], {
+    skillLoader: fakeLoader(),
     out: o.sink,
     err: o.sink,
   });
@@ -173,10 +141,10 @@ test("run setup with stubbed fetch and --stdout exits 0 and prints the skill", a
   expect(o.lines.join("\n")).toContain("v1.23.0");
 });
 
-test("run update exits 0 and does not use the clipboard under --stdout", async () => {
+test("run update exits 0 under --stdout", async () => {
   const o = capture();
   const code = await run(["update", "--stdout"], {
-    fetchImpl: okFetch("v3.1.0", "body"),
+    skillLoader: fakeLoader("**Template version:** `v3.1.0`\nbody"),
     out: o.sink,
     err: o.sink,
   });
@@ -184,46 +152,31 @@ test("run update exits 0 and does not use the clipboard under --stdout", async (
   expect(o.lines.join("\n")).toContain("v3.1.0");
 });
 
-test("run reads BTJ_BASE_URL from injected env", async () => {
-  let seen = "";
-  const code = await run(["setup", "--stdout"], {
-    fetchImpl: async (url) => {
-      seen = url;
-      return { ok: true, status: 200, json: async () => ({ version: "v1", content: "x" }) };
-    },
-    env: { BTJ_BASE_URL: "http://from-env" },
-    out: () => {},
-    err: () => {},
-  });
-  expect(code).toBe(0);
-  expect(seen).toBe("http://from-env/skill");
-});
-
-test("run returns exit 1 on fetch failure and prints the reason", async () => {
+test("run returns exit 1 when the bundled skill can't load", async () => {
   const o = capture();
   const code = await run(["setup"], {
-    fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({}) }),
+    skillLoader: () => {
+      throw new Error("Bundled skill is missing or malformed (no Template version line).");
+    },
     out: o.sink,
     err: o.sink,
   });
   expect(code).toBe(1);
-  expect(o.lines.join("\n")).toContain("Could not fetch the skill");
+  expect(o.lines.join("\n")).toContain("malformed");
 });
 
 test("run returns exit 1 for an unknown or missing command", async () => {
-  const bad = await run(["frobnicate"], { out: () => {}, err: () => {} });
-  expect(bad).toBe(1);
-  const none = await run([], { out: () => {}, err: () => {} });
-  expect(none).toBe(1);
+  expect(await run(["frobnicate"], { out: () => {}, err: () => {} })).toBe(1);
+  expect(await run([], { out: () => {}, err: () => {} })).toBe(1);
 });
 
-test("run --help and --version exit 0 without fetching", async () => {
-  let fetched = false;
-  const fetchImpl = async () => {
-    fetched = true;
-    return { ok: true, status: 200, json: async () => ({}) };
+test("run --help and --version exit 0 without loading the skill", async () => {
+  let loaded = false;
+  const skillLoader = () => {
+    loaded = true;
+    return { version: "v1", content: "x" };
   };
-  expect(await run(["--help"], { fetchImpl, out: () => {}, err: () => {} })).toBe(0);
-  expect(await run(["--version"], { fetchImpl, out: () => {}, err: () => {}, pkgVersion: "0.1.0" })).toBe(0);
-  expect(fetched).toBe(false);
+  expect(await run(["--help"], { skillLoader, out: () => {}, err: () => {} })).toBe(0);
+  expect(await run(["--version"], { skillLoader, out: () => {}, err: () => {}, pkgVersion: "1.23.1" })).toBe(0);
+  expect(loaded).toBe(false);
 });
