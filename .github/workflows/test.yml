@@ -15,8 +15,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Need history so the append-only ledger check can diff against the base.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
       - run: bun test
+      - name: Enforce skill-versions.json is append-only
+        # A released skill version must map to one content hash forever. Compare the
+        # ledger against the base (PR base branch, or the parent commit on a push) and
+        # fail if any existing entry was changed or removed — the only allowed edit is
+        # ADDING a new version. This is what actually forces a version bump on any
+        # skill content change; the bun test only ties the lock/ledger to the current
+        # skill. First introduction (no base ledger) is a no-op.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            BASE="origin/$BASE_REF"
+          else
+            BASE="HEAD^"
+          fi
+          if git cat-file -e "$BASE:skill-versions.json" 2>/dev/null; then
+            git show "$BASE:skill-versions.json" > /tmp/base-versions.json
+            node -e '
+              const base = require("/tmp/base-versions.json");
+              const cur = require("./skill-versions.json");
+              let bad = false;
+              for (const [v, h] of Object.entries(base)) {
+                if (!(v in cur)) {
+                  console.error(`::error::skill-versions.json dropped released version ${v} — the ledger is append-only`);
+                  bad = true;
+                } else if (cur[v] !== h) {
+                  console.error(`::error::skill-versions.json changed the hash of ${v} — a released version is immutable; add a NEW version instead of rewriting this one`);
+                  bad = true;
+                }
+              }
+              if (bad) process.exit(1);
+            '
+          else
+            echo "No base skill-versions.json (first introduction) — nothing to enforce."
+          fi
       - name: CLI entrypoint smoke test
         run: |
           set -euo pipefail
