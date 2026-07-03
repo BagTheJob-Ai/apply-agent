@@ -63,6 +63,11 @@ jobs:
             echo "::error::skill.lock ($LOCK_VER / $LOCK_SHA) does not match APPLICATION_AGENT.md ($SKILL_VER / $SKILL_SHA) — the skill changed without regenerating skill.lock." >&2
             exit 1
           fi
+          LEDGER_SHA="$(node -p "require('./skill-versions.json')['$SKILL_VER'] || ''")"
+          if [ "$LEDGER_SHA" != "$SKILL_SHA" ]; then
+            echo "::error::skill-versions.json has no matching entry for $SKILL_VER ($SKILL_SHA) — record the released version in the ledger." >&2
+            exit 1
+          fi
 
       - name: Smoke-test the CLI entrypoint
         run: |
