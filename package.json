@@ -1,0 +1,32 @@
+{
+  "name": "@bagthejobai/apply-agent",
+  "version": "1.23.1",
+  "description": "Fetch the latest BagTheJob application-agent skill to your clipboard for manual paste into Claude. Fetch-and-paste helper only — never installs, writes, or registers anything.",
+  "type": "module",
+  "bin": {
+    "apply-agent": "./bin/apply-agent.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "homepage": "https://app.bagthejob.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BagTheJob-Ai/apply-agent.git"
+  },
+  "keywords": [
+    "bagthejob",
+    "job-application",
+    "claude",
+    "cli"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

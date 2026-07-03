@@ -1,0 +1,63 @@
+name: Publish
+
+# Publishes @bagthejobai/apply-agent to npm when a GitHub Release tagged `v<semver>`
+# is published (e.g. v1.23.1). The job refuses to publish unless the release tag
+# matches package.json, and the package major.minor matches the live skill's
+# Template version fetched from the public GET /skill endpoint — the package
+# version tracks the skill release line (BagTheJob issue #217), so a drifted or
+# mis-tagged release fails loudly instead of shipping.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.release.tag_name, 'v')
+    env:
+      TAG_NAME: ${{ github.event.release.tag_name }}
+      SKILL_URL: https://app.bagthejob.ai/skill
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify tag == package version, and major.minor tracks the live skill
+        run: |
+          set -euo pipefail
+          TAG_VER="${TAG_NAME#v}"
+          PKG_VER="$(node -p "require('./package.json').version")"
+          SKILL_VER="$(curl -fsSL "$SKILL_URL" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write((JSON.parse(s).version||'').replace(/^v/,''))}catch{process.exit(2)}})")"
+          echo "tag=$TAG_VER  package.json=$PKG_VER  skill=$SKILL_VER"
+          if [ -z "$SKILL_VER" ]; then
+            echo "::error::Could not read the skill version from $SKILL_URL" >&2
+            exit 1
+          fi
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "::error::Release tag version ($TAG_VER) != package.json version ($PKG_VER)" >&2
+            exit 1
+          fi
+          TAG_MM="${TAG_VER%.*}"; SKILL_MM="${SKILL_VER%.*}"
+          if [ "$TAG_MM" != "$SKILL_MM" ]; then
+            echo "::error::package major.minor ($TAG_MM) != skill major.minor ($SKILL_MM). The package version must track the skill release line." >&2
+            exit 1
+          fi
+
+      - name: Smoke-test the CLI entrypoint
+        run: |
+          set -euo pipefail
+          OUT="$(node bin/apply-agent.js --version)"
+          echo "apply-agent --version -> $OUT"
+          test "$OUT" = "${TAG_NAME#v}"
+
+      - name: Publish
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

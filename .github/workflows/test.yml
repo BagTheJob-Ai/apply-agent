@@ -1,0 +1,26 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: bun test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun test
+      - name: CLI entrypoint smoke test
+        run: |
+          set -euo pipefail
+          OUT="$(node bin/apply-agent.js --version)"
+          PKG="$(node -p "require('./package.json').version")"
+          echo "apply-agent --version -> $OUT (package.json $PKG)"
+          test "$OUT" = "$PKG"
