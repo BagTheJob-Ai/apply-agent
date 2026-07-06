@@ -54,8 +54,8 @@ jobs:
       - name: Verify skill.lock matches APPLICATION_AGENT.md (release gate)
         run: |
           set -euo pipefail
-          LOCK_VER="$(node -p "require('./skill.lock').version")"
-          LOCK_SHA="$(node -p "require('./skill.lock').sha256")"
+          LOCK_VER="$(node -p "JSON.parse(require('fs').readFileSync('./skill.lock', 'utf8')).version")"
+          LOCK_SHA="$(node -p "JSON.parse(require('fs').readFileSync('./skill.lock', 'utf8')).sha256")"
           SKILL_VER="$(grep -m1 -oE '\*\*Template version:\*\* `v[0-9]+\.[0-9]+\.[0-9]+`' APPLICATION_AGENT.md | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')"
           SKILL_SHA="$(shasum -a 256 APPLICATION_AGENT.md | awk '{print $1}')"
           echo "lock=$LOCK_VER/$LOCK_SHA  skill=$SKILL_VER/$SKILL_SHA"
