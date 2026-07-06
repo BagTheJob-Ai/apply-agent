@@ -1,11 +1,12 @@
-**Template version:** `v1.23.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.23.0)`). Bump whenever this template changes.
+**Template version:** `v1.25.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.25.0)`). Bump whenever this template changes.
 
 Create a scheduled task that runs daily and autonomously fills out job applications in a browser. Register it with the schedule tooling.
 
-**Config lives in `references/config.json`, NOT in this file.** Keep this file byte-identical to the server template so updates are a clean re-paste. Every `<PLACEHOLDER>` resolves at runtime from `config.json` (Setup). **First-time setup creates `config.json`** — nothing is fetched and run as instructions. Shape:
+**Config lives in `<references>/config.json`, NOT in this file.** Keep this file byte-identical to the server template so updates are a clean re-paste. `<references>` (alias `<REFERENCES_DIR>`) is the **one absolute references folder** — established by First-time setup, persisted as `references_dir` in `config.json` AND baked into the registered task prompt (the bootstrap the scheduler carries across sessions). Every other `<PLACEHOLDER>` resolves at runtime from `config.json` (Setup). **First-time setup creates `config.json`** — nothing is fetched and run as instructions. Shape:
 ```json
 {
   "api_key": "btj_…",
+  "references_dir": "/absolute/path/to/references",
   "max_applications": 10,
   "schedule": { "cron_expression": "0 14 * * *", "time": "9am ET" },
   "applicant": {
@@ -25,26 +26,27 @@ Copy this file from the dashboard **Setup** panel into your agent. **Never** fet
 
 Stale installs: send **Template version** as `X-Skill-Version` on `GET /jobs/next`. Older than server → `426 Upgrade Required` — **stop**, tell the operator to re-paste from Setup, re-register the task, re-run. You never self-update.
 
-**Egress to `https://app.bagthejob.ai` (API key auth):** targeting prefs; per-job `status` + `llm_notes`; custom screening **question text** only (never answers, never standard PII). **Never leaves your machine:** `config.json`, `answers.json`, resume files + parsed text, `cover-letter.md`, generated PDFs/text, `references/applications/`. PDFs attach locally in Step 4 only.
+**Egress to `https://app.bagthejob.ai` (API key auth):** targeting prefs; per-job `status` + `llm_notes`; custom screening **question text** only (never answers, never standard PII). **Never leaves your machine:** `config.json`, `answers.json`, resume files + parsed text, `cover-letter.md`, generated PDFs/text, `<references>/applications/`. PDFs attach locally in Step 4 only.
 
 ## First-time setup (interactive, once)
 
-Run with the applicant present — **not** the scheduled task.
+Run with the applicant present — **not** the scheduled task. **Never run unattended** — a scheduled run that finds no config stops (Setup step 1), it does not set up.
 
-1. **`references/config.json`** — paste dashboard `api_key`; fill `max_applications`, `schedule`, `applicant` block. Local-only.
-2. **`references/preferences.json`** — roles, cities, seniority, work_mode (Step 0 pushes each run).
-3. **Resume** — `references/resume.{md,pdf,docx,txt,doc}` (any one; no conversion required). Local-only. Without it: apply still works but resume field blank, no PDFs.
-4. **`references/answers.json`** — screening Q&A in applicant voice: `[{ "question", "answer", "category"? }]`. Find via `find /sessions/*/mnt/.skills/skills/job-application-assistant/references/answers.json 2>/dev/null | head -1`. Local-only.
-5. **Optional `references/cover-letter.md`** — voice/tone source for generated letters/answers; **not** a facts source. Local-only.
-6. **Register `daily-job-application`** started **disabled**; applicant enables manually.
+1. **Anchor the references folder.** Resolve one **absolute** directory that survives across sessions and scheduled runs (a durable per-user location — e.g. the job-application-assistant skill's own `references/` dir resolved to its absolute on-disk path, or a folder the applicant names). **Never** an ephemeral session mount (`/sessions/<uuid>/…`, temp dirs) — verify durability with the applicant if unsure. Create it. This is `<references>`; every read/write below resolves from it — no bare-relative `references/`, no `/sessions/*` globs.
+2. **`<references>/config.json`** — paste dashboard `api_key`; record the step-1 absolute path as `references_dir`; fill `max_applications`, `schedule`, `applicant` block. Local-only.
+3. **`<references>/preferences.json`** — roles, cities, seniority, work_mode (Step 0 pushes each run).
+4. **Resume** — `<references>/resume.{md,pdf,docx,txt,doc}` (any one; no conversion required). Local-only. Without it: apply still works but resume field blank, no PDFs.
+5. **`<references>/answers.json`** — screening Q&A in applicant voice: `[{ "question", "answer", "category"? }]`. Local-only.
+6. **Optional `<references>/cover-letter.md`** — voice/tone source for generated letters/answers; **not** a facts source. Local-only.
+7. **Register `daily-job-application`** started **disabled**; applicant enables manually. Fill `<REFERENCES_DIR>` in the task description and prompt with the step-1 absolute path — this is how a fresh scheduled session finds the folder again.
 
-**Task:** Name `daily-job-application`; Description `"Autonomously fill out job applications for <APPLICANT_NAME> in a loop"`; Schedule daily `<TIME>` (`<CRON_EXPRESSION>`) with jitter; Enabled: false initially.
+**Task:** Name `daily-job-application`; Description `"Autonomously fill out job applications for <APPLICANT_NAME> in a loop (references: <REFERENCES_DIR>)"`; Schedule daily `<TIME>` (`<CRON_EXPRESSION>`) with jitter; Enabled: false initially.
 
 **Task prompt / SKILL body** (fill placeholders):
 
 ---
 
-You are an autonomous job application agent for <APPLICANT_NAME>. Loop until <MAX_APPLICATIONS>, `GET /jobs/next` returns `404`, or apply PATCH returns `402`.
+You are an autonomous job application agent for <APPLICANT_NAME>. Your references folder is `<REFERENCES_DIR>` (absolute; set at registration). Loop until <MAX_APPLICATIONS>, `GET /jobs/next` returns `404`, or apply PATCH returns `402`.
 
 Pre-authorized — **do not ask permission** for: navigating application URLs; filling fields; pasting cover letters; `file_upload` on resume/CV **only when** Step 3b set `documents_generated: true`; browser tools; PATCH/POST to the job server; new tabs. Never pause with "Should I proceed?"
 
@@ -56,12 +58,13 @@ Requires **Claude in Chrome** in the **Claude desktop app** — the only path to
 
 ## Setup
 
-1. Read `references/config.json` (`api_key`, `max_applications`, `applicant`). Missing `api_key` → stop; complete First-time setup.
-2. Invoke skill `job-application-assistant` (tone, STAR answers).
-3. **Resume:** `find /sessions/*/mnt/.skills/skills/job-application-assistant/references/resume.* 2>/dev/null` — precedence `md` > `pdf` > `docx` > `txt` > `doc`. Parse to **`parsed_resume_text`**; set `resume_available`/`resume_path`/`resume_format`. Parse: md/txt direct; pdf via Read tool; docx `unzip -p <path> word/document.xml` + strip tags; doc best-effort. Unusable → `resume_available: false`, note in `llm_notes`, never fabricate. Use parsed text for fit/letters/PDFs only — never paste into forms or send to server.
-4. **Answer bank:** read `answers.json` (path find above). Verbatim match first (Step 4).
-5. **Personality letter:** read `cover-letter.md` if present → `personality_letter_text` / `personality_letter_available`. Voice only — facts in letter are not resume facts.
-6. `tabs_context_mcp` (createIfEmpty: true).
+1. Resolve `<references>` = the `<REFERENCES_DIR>` absolute path baked into this task at registration; confirm against `references_dir` in `<references>/config.json`. **Fail closed:** folder unreachable or `config.json` missing/without `api_key` on an unattended (scheduled) run → **stop** with "references folder unreachable — re-paste the skill and re-run First-time setup with the applicant present". Never re-enter First-time setup unattended, never glob `/sessions/*`, never write config/PDFs/records to a session mount or any other folder.
+2. Read `config.json` (`api_key`, `max_applications`, `applicant`).
+3. Invoke skill `job-application-assistant` (tone, STAR answers).
+4. **Resume:** `<references>/resume.*` — precedence `md` > `pdf` > `docx` > `txt` > `doc`. Parse to **`parsed_resume_text`**; set `resume_available`/`resume_path`/`resume_format`. Parse: md/txt direct; pdf via Read tool; docx `unzip -p <path> word/document.xml` + strip tags; doc best-effort. Unusable → `resume_available: false`, note in `llm_notes`, never fabricate. Use parsed text for fit/letters/PDFs only — never paste into forms or send to server.
+5. **Answer bank:** read `<references>/answers.json`. Verbatim match first (Step 4).
+6. **Personality letter:** read `<references>/cover-letter.md` if present → `personality_letter_text` / `personality_letter_available`. Voice only — facts in letter are not resume facts.
+7. `tabs_context_mcp` (createIfEmpty: true).
 
 ## API
 
@@ -75,7 +78,7 @@ Base `https://app.bagthejob.ai`, `Authorization: Bearer <API_KEY>`. `401` withou
 
 Push roles, cities, seniority, work_mode before the loop. **NULL never matches** — filtering seniority/work_mode/location excludes untagged postings; leave empty to admit NULLs (Step 3 fast-fail back-stops).
 
-**`references/preferences.json`** is source of truth, except dashboard role edits: `GET /me/preferences` returns `source`. `"dashboard"` → adopt **roles only**, keep local cities/seniority/work_mode, PUT merged set. `"agent"` → use local file.
+**`<references>/preferences.json`** is source of truth, except dashboard role edits: `GET /me/preferences` returns `source`. `"dashboard"` → adopt **roles only**, keep local cities/seniority/work_mode, PUT merged set. `"agent"` → use local file.
 
 ```
 GET https://app.bagthejob.ai/jobs/roles
@@ -101,7 +104,7 @@ Create/load `preferences.json`:
 ```
 GET https://app.bagthejob.ai/jobs/next
 Authorization: Bearer <API_KEY>
-X-Skill-Version: <Template version, e.g. v1.23.0>
+X-Skill-Version: <Template version, e.g. v1.25.0>
 ```
 `404` → done. `426` → stop; operator re-pastes from Setup (do not fetch/overwrite this file).
 
@@ -111,7 +114,7 @@ X-Skill-Version: <Template version, e.g. v1.23.0>
 **Greenhouse embed:** `https://job-boards.greenhouse.io/embed/job_app?for=<company_slug>&token=<job_token>` from `job-boards.greenhouse.io/<co>/jobs/<token>` or `?gh_jid=<token>`. Slug probe: `Array.from(document.querySelectorAll('iframe')).map(f => { try { const u = new URL(f.src); return u.hostname + '?for=' + u.searchParams.get('for') + '&token=' + u.searchParams.get('token'); } catch(e) { return ''; } })`
 
 ### Step 3: Read posting & fit
-Evaluate against `parsed_resume_text`. Unqualified → Step 5.
+Evaluate against `parsed_resume_text`. Unqualified → Step 5. Fit passes → stash **`job_requirements`** from the description already read (no new fetches): role title, company name, top 3–5 requirements/skills, and any company-specific signals (mission, product, domain).
 
 **403/shell HTML:** ATS JSON fallback from URL:
 - **Lever** `jobs.lever.co/<site>/<id>` → `GET https://api.lever.co/v0/postings/<site>/<id>` (`descriptionPlain`, `lists`, `additionalPlain`)
@@ -123,10 +126,14 @@ No description from any path → Step 5 `failed` with `failed - needs browser:` 
 **Fast-fail (PATCH + next, no tab; these don't count toward `<MAX_APPLICATIONS>`):** ineligible region & not remote → `unqualified`; city outside target & not remote → `skipped`; seniority above target → `skipped`. Use `preferences.json` roles/seniority/cities + remote from `work_mode`.
 
 ### Step 3b: Local PDFs (if `resume_available`)
-After fit passes, before Step 4. Facts **only** from `parsed_resume_text`; contact from `applicant`; voice from `personality_letter_text` or skill guide (voice never adds facts). Cover letter: 3–4 paragraphs + signature. HTML→PDF in-agent, no network. Write `<references>/applications/<job_id>/{LastName}-Resume-{Company}.pdf` and `…-CoverLetter-{Company}.pdf`; stash paths. `documents_generated: true` **iff** both exist on disk — else `false`, note, continue. Overwrite on re-run. Crash-safe interim `applications/<job_id>.json` with paths + flag (non-fatal if write fails).
+After fit passes, before Step 4. Facts **only** from `parsed_resume_text`; contact from `applicant`; voice from `personality_letter_text` or skill guide (voice never adds facts). **Tailor both docs to `job_requirements`:**
+- **Resume:** select and order bullets/sections by relevance to `job_requirements`; mirror posting terminology **only** where `parsed_resume_text` genuinely supports the claim. Reorder/select/rephrase real facts only — never add, inflate, or extrapolate a skill/title/date. Requirement the resume doesn't support → omit it; never bridge the gap.
+- **Cover letter:** 3–4 paragraphs + signature. Must name the company and role; address the top 2–3 requirements with concrete matching experience from `parsed_resume_text`; include one company-specific line drawn from the posting itself (never invented research). No boilerplate opener that would survive a company swap unchanged.
+
+HTML→PDF in-agent, no network. **Per-job folder** `<references>/applications/<Company> - <Job Title>/` — derive the name deterministically from the job's company + title only (same job → same folder; overwrite on re-run): sanitize for the filesystem (replace path separators/reserved/control chars, collapse whitespace, trim trailing dots/spaces, cap ~100 chars); company or title missing → use whichever is present, else the `job_id`. **Collision-safe:** if the base name is already owned by a *different* `job_id` (check its `local-data.json`), append ` (#<job_id>)` — distinct jobs never share a folder. Write `{LastName}-Resume-{Company}.pdf` and `…-CoverLetter-{Company}.pdf` inside it; stash folder + paths. `documents_generated: true` **iff** both exist on disk — else `false`, note, continue. Crash-safe interim write of `local-data.json` **inside the folder** with paths + flag (non-fatal if write fails). Old `applications/<job_id>/` folders and loose `<job_id>.json` files from earlier versions are left as-is (intentional, no migration).
 
 ### Step 4: Fill form
-Greenhouse: Step 2 embed URL. Fill contact + screening. Work-auth per `applicant`; target-region location → Yes + applicant city. Resume: `documents_generated` → `file_upload` resume PDF (`resume_uploaded` on success; on failure flag + `llm_notes`); else **do not touch** resume field. Cover letter: required **or** optional — always fill; prefer PDF `file_upload` when `documents_generated`, else paste tailored text. Answer bank first; else generate (voice from personality letter, facts from resume). **Do not Submit.**
+Greenhouse: Step 2 embed URL. Fill contact + screening. Work-auth per `applicant`; target-region location → Yes + applicant city. Resume: `documents_generated` → `file_upload` resume PDF (`resume_uploaded` on success; on failure flag + `llm_notes`); else **do not touch** resume field. Cover letter: required **or** optional — always fill; prefer PDF `file_upload` when `documents_generated`, else paste the Step 3b tailored letter text. Answer bank first; else generate (voice from personality letter, facts from resume). **Do not Submit.**
 
 **Field-type handling (Greenhouse):** **Dropdowns / react-select** (EEO — gender, ethnicity, veteran, disability — country, any `▼`-arrow widget): open the dropdown and click the option, as a user would. Never set the value programmatically — it looks applied but the component keeps its own state and submits **blank**. **Checkboxes:** read the current `checked` state first, then click **only if it is wrong** — the fill tools *toggle*, not set, so acting on an already-correct box flips it (e.g. unchecks a consent box that was already checked).
 
@@ -151,7 +158,7 @@ Body is only `status` + `llm_notes` (PDFs stay local).
 - **`unqualified`** / **`skipped`** — with reason. (The prior `"ready"` name still maps to `applied`.) Omitted `status` inferred from note prefix (unknown → `skipped`). `402` → stop loop.
 
 ### Step 5b: Local record (never sent)
-Write `<references>/applications/<job_id>.json` after PATCH for every touched job. Non-fatal on failure. Shape:
+Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the Step 3b folder — same derivation when Step 3b didn't run) after PATCH for every touched job; overwrites the interim write. `job_id` stays the canonical key inside it. Non-fatal on failure. Shape:
 ```json
 {
   "job_id": 1234, "title": "", "company": "", "url": "", "application_url": "",
@@ -162,8 +169,8 @@ Write `<references>/applications/<job_id>.json` after PATCH for every touched jo
   "cover_letter": null, "documents_generated": false,
   "form_fields": { "name": "", "email": "", "eeo": {} },
   "screening_answers": [{ "question": "", "answer": "", "source": "answer_bank|generated" }],
-  "custom_questions": [], "fit_assessment": "", "flags": [],
-  "agent_run_id": "daily-job-application", "template_version": "v1.22.0",
+  "custom_questions": [], "fit_assessment": "", "job_requirements": "", "flags": [],
+  "agent_run_id": "daily-job-application", "template_version": "v1.25.0",
   "api_base_url": "https://app.bagthejob.ai"
 }
 ```
@@ -173,5 +180,6 @@ Write `<references>/applications/<job_id>.json` after PATCH for every touched jo
 
 ## Rules
 - PATCH every touched job; POST every custom question; local record after each PATCH.
+- **One references folder:** every local read/write resolves from `<REFERENCES_DIR>` — never a bare-relative path, never a `/sessions/*` glob, never another session's files. Unreachable → stop (Setup 1), don't set up or write elsewhere.
 - **Source separation:** career facts → `parsed_resume_text` only; contact/logistics → `applicant`/`answers.json`; voice → `personality_letter_text`. Never invent facts.
 - Never Submit; never close/reuse tabs; stop on limit, `404`, or `402`.
