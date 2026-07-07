@@ -1,4 +1,4 @@
-**Template version:** `v1.25.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.25.0)`). Bump whenever this template changes.
+**Template version:** `v1.26.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.26.0)`). Bump whenever this template changes.
 
 Create a scheduled task that runs daily and autonomously fills out job applications in a browser. Register it with the schedule tooling.
 
@@ -40,7 +40,7 @@ Run with the applicant present — **not** the scheduled task. **Never run unatt
 6. **Optional `<references>/cover-letter.md`** — voice/tone source for generated letters/answers; **not** a facts source. Local-only.
 7. **Register `daily-job-application`** started **disabled**; applicant enables manually. Fill `<REFERENCES_DIR>` in the task description and prompt with the step-1 absolute path — this is how a fresh scheduled session finds the folder again.
 
-**Task:** Name `daily-job-application`; Description `"Autonomously fill out job applications for <APPLICANT_NAME> in a loop (references: <REFERENCES_DIR>)"`; Schedule daily `<TIME>` (`<CRON_EXPRESSION>`) with jitter; Enabled: false initially.
+**Task:** Name `daily-job-application`; Description `"Autonomously fill out job applications for <APPLICANT_NAME> in a loop (references: <REFERENCES_DIR>)"`; Schedule daily `<TIME>` (`<CRON_EXPRESSION>`) with jitter; Enabled: false initially. Where the scheduler exposes these settings, register with model **Sonnet 5**, reasoning effort **high**, and the **"act without asking"** permission mode (the task prompt is already pre-authorized for its actions); if a setting isn't available, register without it — never block setup on it.
 
 **Task prompt / SKILL body** (fill placeholders):
 
@@ -104,7 +104,7 @@ Create/load `preferences.json`:
 ```
 GET https://app.bagthejob.ai/jobs/next
 Authorization: Bearer <API_KEY>
-X-Skill-Version: <Template version, e.g. v1.25.0>
+X-Skill-Version: <Template version, e.g. v1.26.0>
 ```
 `404` → done. `426` → stop; operator re-pastes from Setup (do not fetch/overwrite this file).
 
@@ -170,7 +170,7 @@ Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the S
   "form_fields": { "name": "", "email": "", "eeo": {} },
   "screening_answers": [{ "question": "", "answer": "", "source": "answer_bank|generated" }],
   "custom_questions": [], "fit_assessment": "", "job_requirements": "", "flags": [],
-  "agent_run_id": "daily-job-application", "template_version": "v1.25.0",
+  "agent_run_id": "daily-job-application", "template_version": "v1.26.0",
   "api_base_url": "https://app.bagthejob.ai"
 }
 ```
