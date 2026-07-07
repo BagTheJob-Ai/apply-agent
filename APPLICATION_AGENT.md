@@ -1,4 +1,4 @@
-**Template version:** `v1.26.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.26.0)`). Bump whenever this template changes.
+**Template version:** `v1.27.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.27.0)`). Bump whenever this template changes.
 
 Create a scheduled task that runs daily and autonomously fills out job applications in a browser. Register it with the schedule tooling.
 
@@ -33,7 +33,7 @@ Stale installs: send **Template version** as `X-Skill-Version` on `GET /jobs/nex
 Run with the applicant present — **not** the scheduled task. **Never run unattended** — a scheduled run that finds no config stops (Setup step 1), it does not set up.
 
 1. **Anchor the references folder.** Resolve one **absolute** directory that survives across sessions and scheduled runs (a durable per-user location — e.g. the job-application-assistant skill's own `references/` dir resolved to its absolute on-disk path, or a folder the applicant names). **Never** an ephemeral session mount (`/sessions/<uuid>/…`, temp dirs) — verify durability with the applicant if unsure. Create it. This is `<references>`; every read/write below resolves from it — no bare-relative `references/`, no `/sessions/*` globs.
-2. **`<references>/config.json`** — paste dashboard `api_key`; record the step-1 absolute path as `references_dir`; fill `max_applications`, `schedule`, `applicant` block. Local-only.
+2. **`<references>/config.json`** — paste dashboard `api_key`; record the step-1 absolute path as `references_dir`; fill `max_applications`, `schedule`, `applicant` block. Walk the applicant through **every** `applicant` field, explicitly asking for optional profile links (GitHub, LinkedIn, personal website) — any link or contact detail they volunteer at any point during setup goes into its matching `applicant` field in `config.json` (never into `answers.json`, the resume, or a note file); a URL with no matching field goes in `website_url` if free, else as an `answers.json` entry. Unknown/declined → empty string. Local-only.
 3. **`<references>/preferences.json`** — roles, cities, seniority, work_mode (Step 0 pushes each run).
 4. **Resume** — `<references>/resume.{md,pdf,docx,txt,doc}` (any one; no conversion required). Local-only. Without it: apply still works but resume field blank, no PDFs.
 5. **`<references>/answers.json`** — screening Q&A in applicant voice: `[{ "question", "answer", "category"? }]`. Local-only.
@@ -104,7 +104,7 @@ Create/load `preferences.json`:
 ```
 GET https://app.bagthejob.ai/jobs/next
 Authorization: Bearer <API_KEY>
-X-Skill-Version: <Template version, e.g. v1.26.0>
+X-Skill-Version: <Template version, e.g. v1.27.0>
 ```
 `404` → done. `426` → stop; operator re-pastes from Setup (do not fetch/overwrite this file).
 
@@ -170,7 +170,7 @@ Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the S
   "form_fields": { "name": "", "email": "", "eeo": {} },
   "screening_answers": [{ "question": "", "answer": "", "source": "answer_bank|generated" }],
   "custom_questions": [], "fit_assessment": "", "job_requirements": "", "flags": [],
-  "agent_run_id": "daily-job-application", "template_version": "v1.26.0",
+  "agent_run_id": "daily-job-application", "template_version": "v1.27.0",
   "api_base_url": "https://app.bagthejob.ai"
 }
 ```
