@@ -4,7 +4,6 @@ A tiny command-line helper that copies the [BagTheJob.ai](https://app.bagthejob.
 
 ```bash
 npx @bagthejobai/apply-agent setup     # first-time install
-npx @bagthejobai/apply-agent update    # copy the latest to re-paste
 ```
 
 ## What it does
