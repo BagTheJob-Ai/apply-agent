@@ -2,11 +2,10 @@ name: Publish
 
 # Publishes @bagthejobai/apply-agent to npm when a GitHub Release tagged `v<semver>`
 # is published (e.g. v1.23.1). The job refuses to publish unless the release tag
-# matches package.json, and the package MAJOR version matches the BUNDLED skill's
+# matches package.json, and the package major.minor matches the BUNDLED skill's
 # Template version (APPLICATION_AGENT.md shipped in the package) — the package
-# tracks the skill's major release line (BagTheJob issue #217), so a cross-major
-# drift or mis-tag fails loudly instead of shipping, while the package minor may
-# advance independently of the skill minor. It also re-checks the
+# version tracks the skill release line (BagTheJob issue #217), so a drifted or
+# mis-tagged release fails loudly instead of shipping. It also re-checks the
 # skill.lock release gate (version + content hash) at publish time, so a skill
 # edited without regenerating skill.lock can never be released.
 on:
@@ -31,7 +30,7 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Verify tag == package version, and major tracks the bundled skill
+      - name: Verify tag == package version, and major.minor tracks the bundled skill
         run: |
           set -euo pipefail
           TAG_VER="${TAG_NAME#v}"
@@ -46,9 +45,9 @@ jobs:
             echo "::error::Release tag version ($TAG_VER) != package.json version ($PKG_VER)" >&2
             exit 1
           fi
-          TAG_MAJOR="${TAG_VER%%.*}"; SKILL_MAJOR="${SKILL_VER%%.*}"
-          if [ "$TAG_MAJOR" != "$SKILL_MAJOR" ]; then
-            echo "::error::package major ($TAG_MAJOR) != bundled skill major ($SKILL_MAJOR). The package must track the skill's major release line." >&2
+          TAG_MM="${TAG_VER%.*}"; SKILL_MM="${SKILL_VER%.*}"
+          if [ "$TAG_MM" != "$SKILL_MM" ]; then
+            echo "::error::package major.minor ($TAG_MM) != bundled skill major.minor ($SKILL_MM). The package version must track the skill release line." >&2
             exit 1
           fi
 
