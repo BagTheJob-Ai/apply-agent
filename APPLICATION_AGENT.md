@@ -1,4 +1,4 @@
-**Template version:** `v1.28.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.28.0)`). Bump whenever this template changes.
+**Template version:** `v1.30.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.30.0)`). Bump whenever this template changes.
 
 Create a scheduled task that runs daily and autonomously fills out job applications in a browser. Register it with the schedule tooling.
 
@@ -104,7 +104,7 @@ Create/load `preferences.json`:
 ```
 GET https://app.bagthejob.ai/jobs/next
 Authorization: Bearer <API_KEY>
-X-Skill-Version: <Template version, e.g. v1.28.0>
+X-Skill-Version: <Template version, e.g. v1.30.0>
 ```
 `404` → done. `426` → stop; operator re-pastes from Setup (do not fetch/overwrite this file).
 
@@ -114,7 +114,7 @@ X-Skill-Version: <Template version, e.g. v1.28.0>
 **Greenhouse embed:** `https://job-boards.greenhouse.io/embed/job_app?for=<company_slug>&token=<job_token>` from `job-boards.greenhouse.io/<co>/jobs/<token>` or `?gh_jid=<token>`. Slug probe: `Array.from(document.querySelectorAll('iframe')).map(f => { try { const u = new URL(f.src); return u.hostname + '?for=' + u.searchParams.get('for') + '&token=' + u.searchParams.get('token'); } catch(e) { return ''; } })`
 
 ### Step 3: Read posting & fit
-Evaluate against `parsed_resume_text`. Unqualified → Step 5. Fit passes → stash **`job_requirements`** from the description already read (no new fetches): role title, company name, top 3–5 requirements/skills, and any company-specific signals (mission, product, domain).
+Evaluate against `parsed_resume_text`. Unqualified → Step 5. Fit passes → stash **`job_requirements`** from the description already read (no new fetches): role title, company name, top 3–5 requirements/skills, and any company-specific signals (mission, product, domain). Also stash **`job_keywords`**: an array of the specific ATS-relevant terms the posting uses — hard skills, tools/technologies/frameworks, certifications/degrees, methodologies (e.g. Agile, Scrum), domain-specific terms, and phrases repeated or emphasized in the description. No such terms → empty array, not a failure.
 
 **403/shell HTML:** ATS JSON fallback from URL:
 - **Lever** `jobs.lever.co/<site>/<id>` → `GET https://api.lever.co/v0/postings/<site>/<id>` (`descriptionPlain`, `lists`, `additionalPlain`)
@@ -126,14 +126,24 @@ No description from any path → Step 5 `failed` with `failed - needs browser:` 
 **Fast-fail (PATCH + next, no tab; these don't count toward `<MAX_APPLICATIONS>`):** ineligible region & not remote → `unqualified`; city outside target & not remote → `skipped`; seniority above target → `skipped`. Use `preferences.json` roles/seniority/cities + remote from `work_mode`.
 
 ### Step 3b: Local PDFs (if `resume_available`)
-After fit passes, before Step 4. Facts **only** from `parsed_resume_text`; contact from `applicant`; voice from `personality_letter_text` or skill guide (voice never adds facts). **Tailor both docs to `job_requirements`:**
-- **Resume:** select and order bullets/sections by relevance to `job_requirements`; mirror posting terminology **only** where `parsed_resume_text` genuinely supports the claim. Reorder/select/rephrase real facts only — never add, inflate, or extrapolate a skill/title/date. Requirement the resume doesn't support → omit it; never bridge the gap.
-- **Cover letter:** 3–4 paragraphs + signature. Must name the company and role; address the top 2–3 requirements with concrete matching experience from `parsed_resume_text`; include one company-specific line drawn from the posting itself (never invented research). No boilerplate opener that would survive a company swap unchanged.
+After fit passes, before Step 4. Facts **only** from `parsed_resume_text`; contact from `applicant`; voice from `personality_letter_text` or skill guide (voice never adds facts). **Tailor both docs to `job_requirements` and `job_keywords`:**
+- **Resume:** select and order bullets/sections by relevance to `job_requirements`; for each `job_keywords` entry genuinely supported by `parsed_resume_text`, use that exact posting term at least once (skills section and/or the relevant bullet) — mirror posting terminology **only** where the resume genuinely supports the claim. Reorder/select/rephrase real facts only — never add, inflate, or extrapolate a skill/title/date. A requirement or keyword the resume doesn't support → omit it; never bridge the gap.
+- **Cover letter:** 3 paragraphs + signature, whole letter under 500 words. Must name the company and role; address the top 2–3 requirements with concrete matching experience from `parsed_resume_text`, using supported `job_keywords` terms verbatim where they fit naturally; include **≥1 concrete metric** from `parsed_resume_text` and one company-specific line drawn from the posting itself (never invented research). **Swap test:** if replacing the company name leaves the letter working unchanged it is generic — rewrite it so at least one line could only be about this posting. Obey **Writing rules** below.
+- **Keyword check:** after drafting both docs, re-scan them against `job_keywords` — any supported keyword still missing from the resume gets worked in per the Resume rule above; unsupported keywords stay out. Save `job_keywords` in `local-data.json`.
 
 HTML→PDF in-agent, no network. **Per-job folder** `<references>/applications/<Company> - <Job Title>/` — derive the name deterministically from the job's company + title only (same job → same folder; overwrite on re-run): sanitize for the filesystem (replace path separators/reserved/control chars, collapse whitespace, trim trailing dots/spaces, cap ~100 chars); company or title missing → use whichever is present, else the `job_id`. **Collision-safe:** if the base name is already owned by a *different* `job_id` (check its `local-data.json`), append ` (#<job_id>)` — distinct jobs never share a folder. Write `{LastName}-Resume-{Company}.pdf` and `…-CoverLetter-{Company}.pdf` inside it; stash folder + paths. `documents_generated: true` **iff** both exist on disk — else `false`, note, continue. Crash-safe interim write of `local-data.json` **inside the folder** with paths + flag (non-fatal if write fails). Old `applications/<job_id>/` folders and loose `<job_id>.json` files from earlier versions are left as-is (intentional, no migration).
 
+### Writing rules (every generated cover letter and screening answer)
+Apply even when Step 3b is skipped — generated screening answers in Step 4 obey these too. Facts stay from `parsed_resume_text`, voice from `personality_letter_text` or skill guide; these rules govern only *how* it reads.
+- **Never emit:** `leverage` · `spearheaded` · `comprehensive skillset` · `elevated` (as a verb) · `delve` · `utilize` · `synergize` · `robust` · `passionate about` · `results-oriented` · `I am excited to apply` · `I am writing to express my interest` · `resonates with me`.
+- **Never use em dashes (`—`) or double dashes (`--`).** Join with commas, semicolons, or restructure. Hard rule.
+- **Rhythm:** vary sentence length; never stack 3+ short declaratives in a row.
+- **Plain prose only** — no markdown, bold, headers, or bullet symbols; must paste clean into a textarea.
+- **Defensible:** every specific claim traces to `parsed_resume_text` and could be expanded on live in an interview.
+- **Pre-fill audit:** re-read each draft against these rules before it is filled or pasted; any violation → revise and re-check. Never fill from an unaudited draft. This is a quality pass on our own output, not an evasion step — no character tricks, no writing toward a detector score.
+
 ### Step 4: Fill form
-Greenhouse: Step 2 embed URL. Fill contact + screening. Work-auth per `applicant`; target-region location → Yes + applicant city. Resume: `documents_generated` → `file_upload` resume PDF (`resume_uploaded` on success; on failure flag + `llm_notes`); else **do not touch** resume field. Cover letter: required **or** optional — always fill; prefer PDF `file_upload` when `documents_generated`, else paste the Step 3b tailored letter text. Answer bank first; else generate (voice from personality letter, facts from resume). **Do not Submit.**
+Greenhouse: Step 2 embed URL. Fill contact + screening. Work-auth per `applicant`; target-region location → Yes + applicant city. Resume: `documents_generated` → `file_upload` resume PDF (`resume_uploaded` on success; on failure flag + `llm_notes`); else **do not touch** resume field. Cover letter: required **or** optional — always fill; prefer PDF `file_upload` when `documents_generated`, else paste the Step 3b tailored letter text. Answer bank first; else generate (voice from personality letter, facts from resume, **Writing rules** above) — answer what the question actually asks, concrete over generic, no boilerplate that ignores it. **Do not Submit.**
 
 **Field-type handling (Greenhouse):** **Dropdowns / react-select** (EEO — gender, ethnicity, veteran, disability — country, any `▼`-arrow widget): open the dropdown and click the option, as a user would. Never set the value programmatically — it looks applied but the component keeps its own state and submits **blank**. **Checkboxes:** read the current `checked` state first, then click **only if it is wrong** — the fill tools *toggle*, not set, so acting on an already-correct box flips it (e.g. unchecks a consent box that was already checked).
 
@@ -169,12 +179,13 @@ Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the S
   "cover_letter": null, "documents_generated": false,
   "form_fields": { "name": "", "email": "", "eeo": {} },
   "screening_answers": [{ "question": "", "answer": "", "source": "answer_bank|generated" }],
-  "custom_questions": [], "fit_assessment": "", "job_requirements": "", "flags": [],
-  "agent_run_id": "daily-job-application", "template_version": "v1.28.0",
+  "custom_questions": [], "fit_assessment": "", "job_requirements": "",
+  "job_keywords": [], "flags": [],
+  "agent_run_id": "daily-job-application", "template_version": "v1.30.0",
   "api_base_url": "https://app.bagthejob.ai"
 }
 ```
-`documents_generated: true` only when both PDF paths exist on disk. `resume_action_required` is `false` only when `resume_uploaded` is `true`; otherwise `true` (flag the upload + any un-fillable item). `template_version` matches this file.
+`documents_generated: true` only when both PDF paths exist on disk. `resume_action_required` is `false` only when `resume_uploaded` is `true`; otherwise `true` (flag the upload + any un-fillable item). `job_keywords` always persists the array stashed in Step 3 — even when Step 3b didn't run; it is `[]` only when the posting had no such terms. `template_version` matches this file.
 
 ### Step 6: Confirm `applied_at`, then Step 1.
 
