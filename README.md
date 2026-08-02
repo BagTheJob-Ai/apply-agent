@@ -4,6 +4,7 @@ A tiny command-line helper that copies the [BagTheJob.ai](https://app.bagthejob.
 
 ```bash
 npx @bagthejobai/apply-agent setup     # first-time install
+npx @bagthejobai/apply-agent update    # copy the latest to re-paste
 ```
 
 ## What it does
@@ -44,7 +45,8 @@ The skill is **bundled** in the package, so it works offline and never depends o
 
 Publishing is automated by `.github/workflows/publish.yml`. To cut a release:
 
-1. Update the bundled `APPLICATION_AGENT.md` to the current skill and set `package.json` `version` to match its `Template version` (without the `v`); merge to `main`.
-2. Publish a **GitHub Release** tagged `v<version>` (e.g. `v1.23.1`).
+1. Update the bundled `APPLICATION_AGENT.md` to the current skill and set `package.json` `version` to match its `Template version` (without the `v`).
+2. Update `skill.lock` (version + sha256 of `APPLICATION_AGENT.md`) and append the new version's hash to `skill-versions.json`; merge to `main`.
+3. Publish a **GitHub Release** tagged `v<version>` (e.g. `v1.23.1`).
 
-The workflow refuses to publish unless the release tag matches `package.json` and the package's major.minor matches the **bundled** skill's `Template version`, then runs `npm publish` with the `NPM_TOKEN` repo secret (an npm **Automation** token, so it bypasses account 2FA). Patch releases (e.g. `1.23.0` → `1.23.1`) are available for CLI-only fixes within the same skill line.
+The workflow refuses to publish unless the release tag matches `package.json`, the package's major.minor matches the **bundled** skill's `Template version`, and `skill.lock`/`skill-versions.json` match the bundled skill's version and content hash. It then runs `npm publish` with the `NPM_TOKEN` repo secret (an npm **Automation** token, so it bypasses account 2FA). Patch releases (e.g. `1.23.0` → `1.23.1`) are available for CLI-only fixes within the same skill line.
