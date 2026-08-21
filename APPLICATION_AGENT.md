@@ -1,4 +1,4 @@
-**Template version:** `v1.31.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.31.0)`). Bump whenever this template changes.
+**Template version:** `v1.33.0` — Copy into the `daily-job-application` task description (e.g. `(template v1.33.0)`). Bump whenever this template changes.
 
 Autonomously fill out job applications in a browser. Runs in one of two modes.
 
@@ -69,7 +69,7 @@ Loop until <MAX_APPLICATIONS>, or — **server mode:** `GET /jobs/next` returns 
 
 Pre-authorized — **do not ask permission** for: navigating application URLs; filling fields; pasting cover letters; `file_upload` on resume/CV **only when** Step 3b set `documents_generated: true`; browser tools; PATCH/POST to the job server (server mode); new tabs. Never pause with "Should I proceed?"
 
-**Forbidden:** Submit; closing tabs (`tabs_close_mcp`); reusing tabs across jobs; any resume/CV fill/upload/paste unless `documents_generated: true` (then `file_upload` Step 3b resume PDF only — never paste resume text).
+**Forbidden:** Submit; closing tabs (`tabs_close_mcp`); reusing tabs across jobs — **navigating any existing tab to a job URL is reuse**; every job starts with its own `tabs_create_mcp` (Step 2); any resume/CV fill/upload/paste unless `documents_generated: true` (then `file_upload` Step 3b resume PDF only — never paste resume text).
 
 ## Preconditions (before Setup or API calls)
 
@@ -129,9 +129,11 @@ Create/load `preferences.json`:
 ```
 GET https://app.bagthejob.ai/jobs/next
 Authorization: Bearer <API_KEY>
-X-Skill-Version: <Template version, e.g. v1.31.0>
+X-Skill-Version: <Template version, e.g. v1.33.0>
 ```
 `404` → done. `426` → stop; operator re-pastes from Setup (do not fetch/overwrite this file).
+
+**Read the `404` body before reporting "no jobs".** A `404` can mean the catalog has nothing left for you, or that this account hit its free-plan daily claim ceiling — the run ends either way, but the applicant must be told which. If the body carries an `error` string, quote it verbatim in the run report instead of "no jobs available"; if it does not, report the empty catalog as before. Never invent a limit message for a plain `404`.
 
 **Manual mode — next pasted URL.** No network call. Consume the applicant's URLs in the order given, and for each:
 1. **Normalize — for identity only, never for navigation.** Build a normalized copy: lowercase the host, drop the fragment, drop tracking params (`utm_*`, `gh_src`, `ref`, `source`), drop a trailing slash. **Keep the applicant's URL exactly as pasted** — that is the one Step 2 opens. Normalization decides only which job this *is*, never which address is fetched: a posting can need `ref`, `source`, or a `#/jobs/<id>` route to render at all, and loading a stripped link would blank the page and drop a job the applicant explicitly chose.
@@ -141,15 +143,15 @@ X-Skill-Version: <Template version, e.g. v1.31.0>
 
 Company and title are unknown until Step 3 reads the posting, so the per-job folder is derived there.
 
-### Step 2: New tab
-`tabs_create_mcp` → the job URL exactly as received: the claimed job's URL in server mode, **the applicant's URL exactly as pasted** in manual mode. Never navigate the Step 1 normalized copy — it exists only to derive `local_job_id`. One job = one tab; never reuse or close.
+### Step 2: New tab — mandatory for every job that reaches this step
+`tabs_create_mcp` → the job URL exactly as received: the claimed job's URL in server mode, **the applicant's URL exactly as pasted** in manual mode. **A fresh `tabs_create_mcp` call per job, every time** — never `navigate` an existing tab to a job URL: not the Setup `tabs_context_mcp` tab, not a previous job's tab, not an "empty" tab. Navigating an open tab to a job **is** tab reuse and is forbidden, even when it would be faster. Record the new tab's id as `browser_tab`. Never navigate the Step 1 normalized copy — it exists only to derive `local_job_id`. One job = one tab; never reuse or close.
 
 **Greenhouse embed:** `https://job-boards.greenhouse.io/embed/job_app?for=<company_slug>&token=<job_token>` from `job-boards.greenhouse.io/<co>/jobs/<token>` or `?gh_jid=<token>`. Slug probe: `Array.from(document.querySelectorAll('iframe')).map(f => { try { const u = new URL(f.src); return u.hostname + '?for=' + u.searchParams.get('for') + '&token=' + u.searchParams.get('token'); } catch(e) { return ''; } })`
 
 ### Step 3: Read posting & fit
 Evaluate against `parsed_resume_text`. Unqualified → Step 5. Fit passes → stash **`job_requirements`** from the description already read (no new fetches): role title, company name, top 3–5 requirements/skills, and any company-specific signals (mission, product, domain). Also stash **`job_keywords`**: an array of the specific ATS-relevant terms the posting uses — hard skills, tools/technologies/frameworks, certifications/degrees, methodologies (e.g. Agile, Scrum), domain-specific terms, and phrases repeated or emphasized in the description. No such terms → empty array, not a failure.
 
-**403/shell HTML:** ATS JSON fallback from URL:
+**403/shell HTML:** ATS JSON fallback from URL. The fallback replaces only the *reading* — the Step 2 tab must already exist and stays open; it is never a reason to skip Step 2, and Step 4 still fills in that tab:
 - **Lever** `jobs.lever.co/<site>/<id>` → `GET https://api.lever.co/v0/postings/<site>/<id>` (`descriptionPlain`, `lists`, `additionalPlain`)
 - **Ashby** → `GET https://api.ashbyhq.com/posting-api/job-board/<org>`, match `id`
 - **Greenhouse** → `GET https://boards-api.greenhouse.io/v1/boards/<board>/jobs/<id>` (`content`)
@@ -219,7 +221,7 @@ Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the S
   "screening_answers": [{ "question": "", "answer": "", "source": "answer_bank|generated" }],
   "custom_questions": [], "fit_assessment": "", "job_requirements": "",
   "job_keywords": [], "flags": [],
-  "agent_run_id": "daily-job-application", "template_version": "v1.31.0",
+  "agent_run_id": "daily-job-application", "template_version": "v1.33.0",
   "api_base_url": "https://app.bagthejob.ai"
 }
 ```
@@ -235,4 +237,4 @@ Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the S
 - **Manual mode:** no request to `app.bagthejob.ai` — not `/jobs/next`, `/jobs/all`, `/jobs/{id}/apply`, `/questions`, `/me`, `/me/preferences`, or `/jobs/roles`. Local record after every touched job.
 - **One references folder:** every local read/write resolves from `<REFERENCES_DIR>` — never a bare-relative path, never a `/sessions/*` glob, never another session's files. Unreachable → stop (Setup 1), don't set up or write elsewhere.
 - **Source separation:** career facts → `parsed_resume_text` only; contact/logistics → `applicant`/`answers.json`; voice → `personality_letter_text`. Never invent facts.
-- Never Submit; never close/reuse tabs. Stop on limit; server mode also on `404` or `402`; manual mode also when the URL list is exhausted.
+- Never Submit; never close/reuse tabs — every job opens its own `tabs_create_mcp` tab (Step 2), never by navigating an existing one. Stop on limit; server mode also on `404` (quoting the body's `error` when it has one) or `402`; manual mode also when the URL list is exhausted.
