@@ -1,10 +1,10 @@
 # @bagthejobai/apply-agent
 
-A tiny command-line helper that copies the [BagTheJob.ai](https://app.bagthejob.ai) application-agent skill to your clipboard so you can paste it into the Claude desktop app.
+A tiny command-line helper that copies the [BagTheJob.ai](https://app.bagthejob.ai) application-agent skill to your clipboard so you can paste it into Claude, Codex, or Cursor.
 
 ```bash
-npx @bagthejobai/apply-agent setup     # first-time install
-npx @bagthejobai/apply-agent update    # copy the latest to re-paste
+bunx @bagthejobai/apply-agent setup     # first-time install
+bunx @bagthejobai/apply-agent update    # copy the latest to re-paste
 ```
 
 ## What it does
@@ -13,7 +13,7 @@ npx @bagthejobai/apply-agent update    # copy the latest to re-paste
 - Clipboard support: macOS `pbcopy`, Windows `clip`, Linux `wl-copy`/`xclip`/`xsel`.
 - Prints short instructions for reviewing and pasting it.
 
-`npx @bagthejobai/apply-agent@latest` always pulls the newest published skill.
+`bunx @bagthejobai/apply-agent@latest` always pulls the newest published skill.
 
 ## What it deliberately does NOT do
 
@@ -23,7 +23,7 @@ This is a **paste helper, not an installer.** By design (see the project's issue
 - It never creates or edits `config.json`, `answers.json`, or your resume.
 - It never registers a scheduled task or runs anything on your behalf.
 
-**You** are the install step: review the skill you copied, then paste it into the Claude desktop app yourself. That human review is the security gate — nothing is downloaded and silently executed.
+**You** are the install step: review the skill you copied, then paste it into your selected agent yourself. The supported runtimes are Claude, Codex, and Cursor. That human review is the security gate; nothing is downloaded and silently executed.
 
 ## Options
 
