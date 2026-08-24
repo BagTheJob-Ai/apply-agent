@@ -1,6 +1,6 @@
 {
   "name": "@bagthejobai/apply-agent",
-  "version": "1.34.1",
+  "version": "1.34.2",
   "description": "Fetch the latest BagTheJob application-agent skill to your clipboard for manual paste into Claude, Codex, or Cursor. Fetch-and-paste helper only — never installs, writes, or registers anything.",
   "type": "module",
   "bin": {
