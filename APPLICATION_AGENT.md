@@ -1,4 +1,4 @@
-**Template version:** `v1.34.1` — Copy into your agent instructions. Claude server mode also copies it into the `daily-job-application` task description (e.g. `(template v1.34.1)`). Bump whenever this template changes.
+**Template version:** `v1.34.2` — Copy into your agent instructions. Claude server mode also copies it into the `daily-job-application` task description (e.g. `(template v1.34.2)`). Bump whenever this template changes.
 
 Autonomously fill out job applications in a browser. Runs in one of two modes.
 
@@ -146,7 +146,7 @@ Create/load `preferences.json`:
 ```
 GET https://app.bagthejob.ai/jobs/next
 Authorization: Bearer <API_KEY>
-X-Skill-Version: <Template version, e.g. v1.34.1>
+X-Skill-Version: <Template version, e.g. v1.34.2>
 ```
 `404` → done. `426` → stop; operator re-pastes from Setup (do not fetch/overwrite this file).
 
@@ -185,7 +185,7 @@ After fit passes, before Step 4. Facts **only** from `parsed_resume_text`; conta
 - **Cover letter:** 3 paragraphs + signature, whole letter under 500 words. Must name the company and role; address the top 2–3 requirements with concrete matching experience from `parsed_resume_text`, using supported `job_keywords` terms verbatim where they fit naturally; include **≥1 concrete metric** from `parsed_resume_text` and one company-specific line drawn from the posting itself (never invented research). **Swap test:** if replacing the company name leaves the letter working unchanged it is generic — rewrite it so at least one line could only be about this posting. Obey **Writing rules** below.
 - **Keyword check:** after drafting both docs, re-scan them against `job_keywords` — any supported keyword still missing from the resume gets worked in per the Resume rule above; unsupported keywords stay out. Save `job_keywords` in `local-data.json`.
 
-HTML→PDF in-agent, no network. **Per-job folder** `<references>/applications/<Company> - <Job Title>/` — derive the name deterministically from the job's company + title only (same job → same folder; overwrite on re-run): sanitize for the filesystem (replace path separators/reserved/control chars, collapse whitespace, trim trailing dots/spaces, cap ~100 chars); company or title missing → use whichever is present, else the **job key**. The **job key** is `job_id` in server mode and `local_job_id` in manual mode — one identifier, resolved by mode, used everywhere below. **Collision-safe:** if the base name is already owned by a *different* job key (check its `local-data.json`), append ` (#<job key>)` — distinct jobs never share a folder. Write `{LastName}-Resume-{Company}.pdf` and `…-CoverLetter-{Company}.pdf` inside it; stash folder + paths. `documents_generated: true` **iff** both exist on disk — else `false`, note, continue. Crash-safe interim write of `local-data.json` **inside the folder** with paths + flag (non-fatal if write fails). Old `applications/<job_id>/` folders and loose `<job_id>.json` files from earlier versions are left as-is (intentional, no migration).
+HTML→PDF in-agent, no network. **Per-job folder** `<references>/applications/<FolderName>/` — derive the name deterministically from the job's company + title only (same job → same folder; overwrite on re-run). Folder names contain ASCII letters only (`A-Z`, `a-z`). Remove every character outside `[A-Za-z]` from the company and title, keep the remaining letters in their original case, and concatenate company followed by title. Cap the base name at 100 letters before collision handling. Company or title missing → use whichever is present. If neither has a letter, use `Job` plus a letters-only encoding of the **job key**. Encode the string representation of the job key by converting its UTF-8 bytes to hexadecimal, then mapping `0` through `F` to `A` through `P`. Do not use spaces, digits, punctuation, separators, or Unicode letters in folder names. The **job key** is `job_id` in server mode and `local_job_id` in manual mode — one identifier, resolved by mode, used everywhere below. **Collision-safe:** if a candidate folder is already owned by a *different* job key (check its `local-data.json`), try the base name plus `Job` plus the encoded job key, then append `A`, `AA`, `AAA`, and so on until the first unowned candidate. Distinct jobs never share a folder. Write `{LastName}-Resume-{Company}.pdf` and `…-CoverLetter-{Company}.pdf` inside it; stash folder + paths. `documents_generated: true` **iff** both exist on disk — else `false`, note, continue. Crash-safe interim write of `local-data.json` **inside the folder** with paths + flag (non-fatal if write fails). Old `applications/<job_id>/` folders and loose `<job_id>.json` files from earlier versions are left as-is (intentional, no migration).
 
 ### Writing rules (every generated cover letter and screening answer)
 Apply even when Step 3b is skipped — generated screening answers in Step 4 obey these too. Facts stay from `parsed_resume_text`, voice from `personality_letter_text` or skill guide; these rules govern only *how* it reads.
@@ -224,7 +224,7 @@ Body is only `status` + `llm_notes` (PDFs stay local).
 **Manual mode:** skip the PATCH, but still decide the same `status` and write the same `llm_notes` — they go to the local record in Step 5b, and nothing is billed. There is no `402`, so the loop ends only on the URL list or `<MAX_APPLICATIONS>`.
 
 ### Step 5b: Local record (never sent)
-Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the Step 3b folder — same derivation when Step 3b didn't run) for every touched job, in **both** modes: after the PATCH in server mode, after filling in manual mode. Overwrites the interim write. The **job key** is canonical inside it — `job_id` in server mode, `local_job_id` in manual mode. Non-fatal on failure. Shape:
+Write `<references>/applications/<FolderName>/local-data.json` (the Step 3b folder — same derivation when Step 3b didn't run) for every touched job, in **both** modes: after the PATCH in server mode, after filling in manual mode. Overwrites the interim write. The **job key** is canonical inside it — `job_id` in server mode, `local_job_id` in manual mode. Non-fatal on failure. Shape:
 ```json
 {
   "job_id": 1234, "local_job_id": null, "runtime": "claude", "mode": "server",
@@ -238,7 +238,7 @@ Write `<references>/applications/<Company> - <Job Title>/local-data.json` (the S
   "screening_answers": [{ "question": "", "answer": "", "source": "answer_bank|generated" }],
   "custom_questions": [], "fit_assessment": "", "job_requirements": "",
   "job_keywords": [], "flags": [],
-  "agent_run_id": "daily-job-application", "template_version": "v1.34.1",
+  "agent_run_id": "daily-job-application", "template_version": "v1.34.2",
   "api_base_url": "https://app.bagthejob.ai"
 }
 ```
