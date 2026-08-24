@@ -73,19 +73,19 @@ test("clipboardCommandFor picks the right command per platform", () => {
 
 // ── instructionsFor ──────────────────────────────────────────────────────────
 
-test("setup instructions lead with review and include version + paste steps", () => {
+test("setup instructions lead with review and support each runtime", () => {
   const msg = instructionsFor("setup", { version: "v1.23.0", copied: true });
   expect(msg).toContain("v1.23.0");
   expect(msg).toContain("Review the skill");
-  expect(msg).toContain("daily-job-application");
-  expect(msg).toContain("Claude desktop app");
+  expect(msg).toContain("Claude, Codex, or Cursor");
+  expect(msg).toContain("agent instructions or task description");
   expect(msg).toContain("https://app.bagthejob.ai/dashboard");
 });
 
 test("update instructions frame a clean re-paste over the existing task", () => {
   const msg = instructionsFor("update", { version: "v2.0.0", copied: true });
   expect(msg).toContain("v2.0.0");
-  expect(msg).toContain("over the existing task description");
+  expect(msg).toContain("over the existing instructions");
   expect(msg).toContain("references/ is untouched");
 });
 
