@@ -1,13 +1,13 @@
-**Template version:** `v1.34.2` — Copy into your agent instructions. Claude server mode also copies it into the `daily-job-application` task description (e.g. `(template v1.34.2)`). Bump whenever this template changes.
+**Template version:** `v1.36.0` — Copy into your agent instructions. Claude server mode also copies it into the `daily-job-application` task description (e.g. `(template v1.36.0)`). Bump whenever this template changes.
 
 Autonomously fill out job applications in a browser. Runs in one of two modes.
 
 ## Modes
 
-| | **Manual** (free, no account) | **Server** (subscription) |
+| | **Manual** (pasted URLs; no account) | **Server** (catalog; free plan or paid) |
 |---|---|---|
 | Jobs come from | Job URLs the applicant pastes into the prompt | `GET /jobs/next` — the curated catalog |
-| Needs an API key | No | Yes |
+| Needs an API key | No | Yes — every signed-in account can mint one, no card required |
 | Talks to `app.bagthejob.ai` | **Never** | Yes |
 | How it runs | On demand; attended or unattended after the applicant supplies URLs and completes permission preflight | Claude, Codex, or Cursor: attended or unattended after interactive setup and permission preflight; scheduling depends on the runtime |
 
@@ -47,7 +47,7 @@ Run with the applicant present — **not** the scheduled task. **Never run unatt
 
 Before you create or write any setup file, complete **Runtime detection and browser capabilities** below. An unsupported runtime or missing required capability must stop before setup changes or server access.
 
-**Resolve the runtime, then ask which mode.** Manual mode needs steps 1, 2, 4, 5, 6 only — **skip steps 3 and 7 entirely**, and do not ask for an API key. An applicant with no subscription is set up in manual mode; they paste job URLs when they want to apply. Server mode runs every step that applies to the resolved runtime.
+**Resolve the runtime, then ask which mode.** Manual mode needs steps 1, 2, 4, 5, 6 only — **skip steps 3 and 7 entirely**, and do not ask for an API key. Manual mode is for applicants who will paste job URLs (no account needed). Server mode uses a dashboard API key — every signed-in account can mint one, including on the free plan — and runs every step that applies to the resolved runtime. Never put a signed-in applicant into manual mode just because they have no paid subscription.
 
 1. **Anchor the references folder.** Resolve one **absolute** directory that survives across sessions and scheduled runs (a durable per-user location — e.g. the job-application-assistant skill's own `references/` dir resolved to its absolute on-disk path, or a folder the applicant names). **Never** an ephemeral session mount (`/sessions/<uuid>/…`, temp dirs) — verify durability with the applicant if unsure. Create it. This is `<references>`; every read/write below resolves from it — no bare-relative `references/`, no `/sessions/*` globs.
 2. **`<references>/config.json`** — **server mode:** paste the dashboard `api_key`. Add `schedule` only when this runtime will register a scheduled local automation. **Manual mode:** omit both keys and never ask for an API key. All modes: record the step-1 absolute path as `references_dir`; fill `max_applications` and the `applicant` block. Walk the applicant through **every** `applicant` field, explicitly asking for optional profile links (GitHub, LinkedIn, personal website) — any link or contact detail they volunteer at any point during setup goes into its matching `applicant` field in `config.json` (never into `answers.json`, the resume, or a note file); a URL with no matching field goes in `website_url` if free, else as an `answers.json` entry. Unknown/declined → empty string. Local-only.
@@ -69,15 +69,15 @@ You are an autonomous job application agent for <APPLICANT_NAME>. Your reference
 
 Loop until <MAX_APPLICATIONS>, or — **server mode:** `GET /jobs/next` returns `404`, or apply PATCH returns `402`; **manual mode:** the pasted URL list is exhausted.
 
-**Workflow authorization:** Every runtime can navigate application URLs, fill fields, paste cover letters, use `upload_file` when Step 3b set `documents_generated: true`, use browser tools, call the job server in server mode, and open new pages without adding a conversational "Should I proceed?" pause. In an attended run, show every native confirmation or approval. In an unattended run, browser actions and personal-data entry must be covered by permissions the applicant configured before the run. Never disable or broaden safeguards during a run. Cursor can use a site/action allowlist, Auto-review, or Browser Auto-run configured in advance; prefer the narrowest policy that covers the application workflow. If required authorization is absent, stop before Setup or any API call.
+**Workflow authorization:** Every runtime can navigate application URLs, fill fields, paste cover letters, use browser tools, call the job server in server mode, and open new pages without adding a conversational "Should I proceed?" pause. **Claude** uses `file_upload` when Step 3b set `documents_generated: true`. **Codex** uses its Browser file chooser in that same case, with attended confirmation or prior unattended permission. **Cursor cannot attach files** — Cursor Browser has no file-upload tool; do not look for a tool named `upload_file`. In an attended run, show every native confirmation or approval. In an unattended run, browser actions and personal-data entry must be covered by permissions the applicant configured before the run. Never disable or broaden safeguards during a run. Cursor can use a site/action allowlist, Auto-review, or Browser Auto-run configured in advance; prefer the narrowest policy that covers the application workflow. If required authorization is absent, stop before Setup or any API call.
 
-**Forbidden on every runtime:** Submit; closing pages; reusing pages across jobs — **navigating any existing page to a job URL is reuse**; every job starts with a fresh `new_page` (Step 2); any resume/CV fill/upload/paste unless `documents_generated: true` (then `upload_file` the Step 3b resume PDF only — never paste resume text).
+**Forbidden on every runtime:** Submit; closing pages; reusing pages across jobs — **navigating any existing page to a job URL is reuse**; every job starts with a fresh `new_page` (Step 2); any resume/CV fill/upload/paste unless `documents_generated: true` (then **Claude** `file_upload` / **Codex** file chooser the Step 3b resume PDF only — never paste resume text). **Cursor** never pastes resume text and never invents an upload.
 
 ## Runtime detection and browser capabilities (before Setup or any API call)
 
 Resolve the session identity as **Claude**, **Codex**, **Cursor**, or **unsupported**. Confirm its browser binding before Setup or any API call. Do not guess a runtime only from overlapping generic tool names.
 
-Required capabilities: `new_page`, `read_page`, `fill_control`, `select_option`, and `set_checkbox`. Optional capabilities: `upload_file` and `eval_read_only`. Tooling must already exist when the run starts. Never install or fetch browser tooling during an application run. A user-configured browser or Model Context Protocol (MCP) integration is valid when it was configured before the run.
+Required capabilities: `new_page`, `read_page`, `fill_control`, `select_option`, and `set_checkbox`. Optional capability: `eval_read_only`. Attach is not a shared tool named `upload_file`: Claude's tool is `file_upload`; Codex uses its Browser file chooser; Cursor has no attach tool. Tooling must already exist when the run starts. Never install or fetch browser tooling during an application run. A user-configured browser or Model Context Protocol (MCP) integration is valid when it was configured before the run.
 
 | Capability | Claude | Codex | Cursor |
 |---|---|---|---|
@@ -85,7 +85,7 @@ Required capabilities: `new_page`, `read_page`, `fill_control`, `select_option`,
 | `read_page` | Claude browser context | installed Codex desktop app Browser rendered-page read | Cursor Browser rendered-page read |
 | `fill_control` / `select_option` | Claude browser fill tools | installed Codex desktop app Browser form controls | Cursor Browser click/type controls |
 | `set_checkbox` | read state, then use Claude browser fill tools | read state, then use Codex desktop app Browser controls | read state, then use Cursor Browser controls |
-| `upload_file` (optional) | `file_upload` | installed Codex desktop app Browser file chooser, with attended confirmation or prior unattended permission | preconfigured upload capability and permission when present |
+| attach resume/cover PDF | `file_upload` | installed Codex desktop app Browser file chooser, with attended confirmation or prior unattended permission | **not available** — Cursor Browser has no file-upload tool; do not probe for `upload_file` |
 | `eval_read_only` (optional) | Claude browser evaluation | installed Codex desktop app Browser read-only evaluation | preconfigured evaluation capability when present |
 | initialize browser | `tabs_context_mcp` | installed Codex desktop app Browser context | Cursor Browser context |
 | close page | forbidden (`tabs_close_mcp`) | forbidden | forbidden |
@@ -104,7 +104,7 @@ Claude, Codex, and Cursor support attended or unattended manual and server modes
 
 ## API (server mode only — manual mode calls none of this)
 
-Base `https://app.bagthejob.ai`, `Authorization: Bearer <API_KEY>`. `401` without key. Only `"status": "applied"` PATCH is billable; `402` on apply when quota+credits exhausted → hard loop-stop. Optional `GET /me` for `remaining` / `promo_credits_remaining`; if both are `0`, stop before claiming.
+Base `https://app.bagthejob.ai`, `Authorization: Bearer <API_KEY>`. `401` without key. Only `"status": "applied"` PATCH is billable; `402` on apply when quota, today's free-plan allowance, and promo credits are all exhausted → hard loop-stop. Optional `GET /me` for `remaining` / `promo_credits_remaining`; if both are `0`, stop before claiming. `remaining` is the live billable budget (monthly quota **or** today's free-plan allowance, never both).
 
 **A failing key stops the run and says so.** Missing, rejected (`401`), or unreachable key → **stop** and report the key as the cause, distinctly from an empty catalog ("no jobs available" and "your API key was rejected" must never read the same). Never fall back to manual mode to keep working: manual mode never reaches the Step 5 PATCH, so a fallback would file applications the server never records. Note the cause in `llm_notes` on any job already touched this run.
 
@@ -146,7 +146,7 @@ Create/load `preferences.json`:
 ```
 GET https://app.bagthejob.ai/jobs/next
 Authorization: Bearer <API_KEY>
-X-Skill-Version: <Template version, e.g. v1.34.2>
+X-Skill-Version: <Template version, e.g. v1.36.0>
 ```
 `404` → done. `426` → stop; operator re-pastes from Setup (do not fetch/overwrite this file).
 
@@ -197,7 +197,7 @@ Apply even when Step 3b is skipped — generated screening answers in Step 4 obe
 - **Pre-fill audit:** re-read each draft against these rules before it is filled or pasted; any violation → revise and re-check. Never fill from an unaudited draft. This is a quality pass on our own output, not an evasion step — no character tricks, no writing toward a detector score.
 
 ### Step 4: Fill form
-Greenhouse: Step 2 embed URL. Fill contact + screening. Work-auth per `applicant`; target-region location → Yes + applicant city. Resume: when `documents_generated` and `upload_file` are available, upload the resume PDF and set `resume_uploaded` only after success. Codex must allow its native personal-file confirmation. When `upload_file` is unavailable or the runtime denies it, leave the resume field untouched, set `resume_action_required: true`, keep `resume_uploaded: false`, add the reason to `llm_notes`, and continue filling other fields. When `documents_generated` is false, also leave the resume field untouched. Cover letter: required **or** optional — always fill; prefer the PDF through `upload_file` when available and generated, else paste the Step 3b tailored letter text. Answer bank first; else generate (voice from personality letter, facts from resume, **Writing rules** above) — answer what the question actually asks, concrete over generic, no boilerplate that ignores it. **Do not Submit.**
+Greenhouse: Step 2 embed URL. Fill contact + screening. Work-auth per `applicant`; target-region location → Yes + applicant city. **Resume** when `documents_generated`: **Claude** calls `file_upload` with the Step 3b resume PDF (`resume_uploaded` only after success; on failure flag + `llm_notes`). Do not skip because a tool named `upload_file` is absent — Claude's tool is `file_upload`. **Codex** attaches that PDF through the installed Browser file chooser and must allow its native personal-file confirmation (same success/failure flags). **Cursor** cannot attach files — Cursor Browser has no file-upload tool; do not probe for `upload_file`; leave the resume field untouched, set `resume_action_required: true`, keep `resume_uploaded: false`, name the missing attach in `llm_notes`, and continue filling other fields. When `documents_generated` is false, leave the resume field untouched on every runtime. Cover letter: required **or** optional — always fill; Claude and Codex prefer the PDF through `file_upload` / the file chooser when generated; Cursor pastes the Step 3b tailored letter text; else paste that text. Answer bank first; else generate (voice from personality letter, facts from resume, **Writing rules** above) — answer what the question actually asks, concrete over generic, no boilerplate that ignores it. **Do not Submit.**
 
 **Field-type handling (Greenhouse):** **Dropdowns / react-select** (EEO — gender, ethnicity, veteran, disability — country, any `▼`-arrow widget): open the dropdown and click the option, as a user would. Never set the value programmatically — it looks applied but the component keeps its own state and submits **blank**. **Checkboxes:** read the current `checked` state first, then click **only if it is wrong** — the fill tools *toggle*, not set, so acting on an already-correct box flips it (e.g. unchecks a consent box that was already checked).
 
@@ -238,7 +238,7 @@ Write `<references>/applications/<FolderName>/local-data.json` (the Step 3b fold
   "screening_answers": [{ "question": "", "answer": "", "source": "answer_bank|generated" }],
   "custom_questions": [], "fit_assessment": "", "job_requirements": "",
   "job_keywords": [], "flags": [],
-  "agent_run_id": "daily-job-application", "template_version": "v1.34.2",
+  "agent_run_id": "daily-job-application", "template_version": "v1.36.0",
   "api_base_url": "https://app.bagthejob.ai"
 }
 ```
